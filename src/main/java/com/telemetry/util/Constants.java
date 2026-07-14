@@ -25,10 +25,6 @@ public final class Constants {
         "Asia", "Europe", "Africa", "North America", "South America", "Australia"
     };
 
-    /** The six allowed grid regions sorted alphabetically. */
-    public static final String[] SORTED_REGIONS = {
-        "Africa", "Asia", "Australia", "Europe", "North America", "South America"
-    };
 
     public static final int READING_TYPE_MIN_LEN = 10;
     public static final int READING_TYPE_MAX_LEN = 15;

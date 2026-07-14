@@ -2,7 +2,6 @@ package com.telemetry;
 
 import com.telemetry.generator.TelemetryGenerator;
 import com.telemetry.model.Telemetry;
-import com.telemetry.parser.TelemetryParser;
 import com.telemetry.router.MessageClassifier;
 import com.telemetry.util.Constants;
 import com.telemetry.util.CsvValidator;
@@ -19,7 +18,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for Milestones 2 and 3 components.
+ * Unit tests for the telemetry generation, parsing, routing, and validation components.
  */
 class AppTest {
 
@@ -101,32 +100,32 @@ class AppTest {
     }
 
     // ──────────────────────────────────────────────
-    // TelemetryParser
+    // Telemetry CSV parsing
     // ──────────────────────────────────────────────
 
     @Test
     void parser_strictParse_valid() {
-        Telemetry t = TelemetryParser.parse("42,2026-03-01T00:00:00Z,ABCDEFGHIJ,Asia");
+        Telemetry t = Telemetry.fromCsv("42,2026-03-01T00:00:00Z,ABCDEFGHIJ,Asia");
         assertEquals(42, t.sensorId());
         assertEquals("Asia", t.gridRegion());
     }
 
     @Test
     void parser_strictParse_invalidThrows() {
-        assertThrows(IllegalArgumentException.class, () -> TelemetryParser.parse(""));
-        assertThrows(IllegalArgumentException.class, () -> TelemetryParser.parse("1,2,3"));
+        assertThrows(IllegalArgumentException.class, () -> Telemetry.fromCsv(""));
+        assertThrows(IllegalArgumentException.class, () -> Telemetry.fromCsv("1,2,3"));
     }
 
     @Test
     void parser_safeParse_valid() {
-        Optional<Telemetry> opt = TelemetryParser.parseSafe("42,2026-03-01T00:00:00Z,ABCDEFGHIJ,Asia");
+        Optional<Telemetry> opt = Telemetry.parseSafe("42,2026-03-01T00:00:00Z,ABCDEFGHIJ,Asia");
         assertTrue(opt.isPresent());
         assertEquals(42, opt.get().sensorId());
     }
 
     @Test
     void parser_safeParse_invalidReturnsEmpty() {
-        Optional<Telemetry> opt = TelemetryParser.parseSafe("1,2,3");
+        Optional<Telemetry> opt = Telemetry.parseSafe("1,2,3");
         assertFalse(opt.isPresent());
     }
 

@@ -1,7 +1,6 @@
 package com.telemetry.router;
 
 import com.telemetry.model.Telemetry;
-import com.telemetry.parser.TelemetryParser;
 import com.telemetry.producer.KafkaProducerService;
 import com.telemetry.util.Constants;
 import org.slf4j.Logger;
@@ -34,7 +33,7 @@ public class MessageRouter {
      * @param rawCsv the raw telemetry message
      */
     public void route(String rawCsv) {
-        Optional<Telemetry> optTelemetry = TelemetryParser.parseSafe(rawCsv);
+        Optional<Telemetry> optTelemetry = Telemetry.parseSafe(rawCsv);
         if (optTelemetry.isEmpty()) {
             parsedErrorCount.incrementAndGet();
             log.error("Failed to parse telemetry record: {}", rawCsv);

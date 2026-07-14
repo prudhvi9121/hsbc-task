@@ -54,6 +54,19 @@ public record Telemetry(int sensorId, String timestamp, String readingType, Stri
     }
 
     /**
+     * Parses a CSV line safely, returning {@link java.util.Optional#empty()} instead of
+     * throwing when the line is malformed. Used by the router to skip corrupt records
+     * and keep the pipeline running without interruption.
+     */
+    public static java.util.Optional<Telemetry> parseSafe(String line) {
+        try {
+            return java.util.Optional.of(fromCsv(line));
+        } catch (Exception e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    /**
      * Fast region lookup to retrieve pre-allocated String constants, avoiding object allocation.
      */
     private static String getConstantRegion(String line, int start) {

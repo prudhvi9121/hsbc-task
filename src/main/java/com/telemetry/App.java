@@ -25,7 +25,13 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 
 /**
- * IoT Telemetry Pipeline — CLI Orchestrator supporting Milestone 2 and 3 commands.
+ * Main entry point and CLI orchestrator for the IoT Telemetry Pipeline.
+ *
+ * <p>Exposes a set of named commands that can be composed to run individual
+ * stages of the pipeline or the complete end-to-end flow in a single invocation.
+ * Each command is self-contained and reports wall-clock timing on completion.
+ *
+ * <p>Run {@code java -jar app.jar help} or pass no arguments to print usage.
  */
 public class App {
 
@@ -34,25 +40,26 @@ public class App {
         long   count   = (args.length > 1) ? Long.parseLong(args[1]) : Constants.COUNT_SMALL;
 
         switch (command) {
-            case "print"        -> phasePrint();
-            case "validate"     -> phaseValidate();
-            case "connect"      -> phaseConnect();
-            case "produce"      -> phaseProduce(count);
-            case "benchmark"    -> phaseBenchmark();
-            case "fullrun"      -> phaseFullRun();
-            case "route"        -> phaseRoute(count);
-            case "routeall"     -> phaseRouteAll();
-            case "countoffsets" -> phaseCountOffsets();
+            case "print"        -> samplePrint();
+            case "validate"     -> sampleValidate();
+            case "connect"      -> brokerConnectTest();
+            case "produce"      -> produce(count);
+            case "benchmark"    -> benchmark();
+            case "fullrun"      -> fullRun();
+            case "route"        -> route(count);
+            case "routeall"     -> routeAll();
+            case "countoffsets" -> countOffsets();
             case "all"          -> runAll();
             default             -> printUsage();
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Phase 1 — Generate & print 100 records
-    // ══════════════════════════════════════════════════════════════════
-    static void phasePrint() {
-        banner("Phase 1: Generate & Print " + Constants.COUNT_PRINT + " Records");
+    // ──────────────────────────────────────────────────────────────────
+    // Sample generation — prints a small set of records to stdout so
+    // operators can visually confirm the CSV schema before a full run.
+    // ──────────────────────────────────────────────────────────────────
+    static void samplePrint() {
+        banner("Generate & Print " + Constants.COUNT_PRINT + " Sample Records");
         TelemetryGenerator gen = new TelemetryGenerator();
         for (int i = 0; i < Constants.COUNT_PRINT; i++) {
             System.out.println(gen.generateTelemetry().toCsv());
@@ -61,11 +68,13 @@ public class App {
         System.out.println("─── Done (" + Constants.COUNT_PRINT + " records printed) ───");
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Phase 2 — Write sample.csv + validate schema
-    // ══════════════════════════════════════════════════════════════════
-    static void phaseValidate() throws IOException {
-        banner("Phase 2: Generate " + Constants.COUNT_VALIDATE + " Records → sample.csv → Validate");
+    // ──────────────────────────────────────────────────────────────────
+    // Schema validation — generates a small CSV file on disk and runs
+    // CsvValidator against it to ensure every field conforms to the
+    // expected schema before large-scale ingestion begins.
+    // ──────────────────────────────────────────────────────────────────
+    static void sampleValidate() throws IOException {
+        banner("Generate " + Constants.COUNT_VALIDATE + " Records → sample.csv → Validate Schema");
         TelemetryGenerator gen = new TelemetryGenerator();
         String filePath = "sample.csv";
 
@@ -83,11 +92,13 @@ public class App {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Phase 3 — Kafka connectivity test
-    // ══════════════════════════════════════════════════════════════════
-    static void phaseConnect() {
-        banner("Phase 3: Kafka Connection Test");
+    // ──────────────────────────────────────────────────────────────────
+    // Broker connectivity test — sends a single probe message to the
+    // source topic and confirms the broker acknowledged it. Use this
+    // to verify network access and topic existence before a full run.
+    // ──────────────────────────────────────────────────────────────────
+    static void brokerConnectTest() {
+        banner("Kafka Broker Connectivity Test");
         try (KafkaProducerService svc =
                  new KafkaProducerService(Constants.TOPIC_SOURCE, ProducerConfig.tuned())) {
             svc.sendRaw("connection-test", "Hello Kafka");
@@ -101,11 +112,15 @@ public class App {
             """);
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Phase 4 — Produce N records with the tuned producer
-    // ══════════════════════════════════════════════════════════════════
-    static void phaseProduce(long count) {
-        banner(String.format("Produce %,d Records  (tuned producer)", count));
+    // ──────────────────────────────────────────────────────────────────
+    // Ingestion — generates N telemetry records on the fly and streams
+    // them directly to the source topic using the high-throughput
+    // producer configuration (LZ4 compression, 64 KB batches).
+    // Records are generated and discarded immediately to keep memory
+    // usage constant regardless of batch size.
+    // ──────────────────────────────────────────────────────────────────
+    static void produce(long count) {
+        banner(String.format("Ingesting %,d Records to Source Topic", count));
         TelemetryGenerator gen   = new TelemetryGenerator();
         ProgressTimer      timer = new ProgressTimer();
 
@@ -116,27 +131,33 @@ public class App {
                 svc.sendAsync(gen.generateTelemetry());
                 timer.checkpoint(i + 1);
             }
-            svc.flush();    // ensure all buffered records reach Kafka before stopping timer
+            // Flush ensures all buffered records reach the broker before
+            // the timer stops, giving accurate end-to-end throughput figures.
+            svc.flush();
         }
         timer.stop(count);
         printVerifyHint(count);
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Phase 5 — Benchmark: baseline vs tuned producer
-    // ══════════════════════════════════════════════════════════════════
-    static void phaseBenchmark() {
-        banner("Benchmark: Baseline vs Tuned Producer (" +
+    // ──────────────────────────────────────────────────────────────────
+    // Throughput benchmark — runs the same workload against the default
+    // (untuned) producer and the optimised producer back to back and
+    // prints a side-by-side comparison. Useful for verifying that tuning
+    // changes (batching, compression, linger) are having the expected
+    // effect on a given host/network combination.
+    // ──────────────────────────────────────────────────────────────────
+    static void benchmark() {
+        banner("Producer Throughput Benchmark — Baseline vs Tuned (" +
                String.format("%,d", Constants.COUNT_SMALL) + " records each)");
 
         TelemetryGenerator gen = new TelemetryGenerator();
 
-        // ── Baseline ────────────────────────────────────────────────
+        // ── Baseline (vanilla Kafka defaults) ───────────────────────
         System.out.println("── Baseline (no tuning) ──");
         ProgressTimer baseTimer = new ProgressTimer();
         try (KafkaProducerService svc =
                  new KafkaProducerService(Constants.TOPIC_SOURCE, ProducerConfig.baseline())) {
-            baseTimer.start(0);   // timing only, no progress printing
+            baseTimer.start(0);   // timing only, progress printing suppressed
             for (long i = 0; i < Constants.COUNT_SMALL; i++) {
                 svc.sendAsync(gen.generateTelemetry());
             }
@@ -146,7 +167,7 @@ public class App {
 
         System.out.println();
 
-        // ── Tuned ────────────────────────────────────────────────────
+        // ── Tuned (LZ4, 64 KB batch, 20 ms linger) ──────────────────
         System.out.println("── Tuned (lz4, 64KB batch, 20ms linger) ──");
         ProgressTimer tunedTimer = new ProgressTimer();
         try (KafkaProducerService svc =
@@ -159,7 +180,7 @@ public class App {
         }
         long tunedMs = tunedTimer.stop(Constants.COUNT_SMALL);
 
-        // ── Comparison ───────────────────────────────────────────────
+        // ── Summary ──────────────────────────────────────────────────
         System.out.println();
         double speedup = baseMs > 0 ? (double) baseMs / tunedMs : 1.0;
         System.out.printf("  Baseline : %,.3f sec%n", baseMs  / 1000.0);
@@ -168,11 +189,13 @@ public class App {
         System.out.println();
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Phase 6 — Full 50 M-record run
-    // ══════════════════════════════════════════════════════════════════
-    static void phaseFullRun() {
-        banner(String.format("Full Run: %,d Records", Constants.COUNT_FULL));
+    // ──────────────────────────────────────────────────────────────────
+    // Full ingestion run — produces the complete 50-million-record
+    // dataset to the source topic with 5%-interval progress reporting.
+    // This is the primary data-loading step before stream routing.
+    // ──────────────────────────────────────────────────────────────────
+    static void fullRun() {
+        banner(String.format("Full Ingestion: %,d Records", Constants.COUNT_FULL));
         System.out.println("  Progress reported every 5% (~2.5M records)");
         System.out.println();
 
@@ -193,76 +216,89 @@ public class App {
         printVerifyHint(Constants.COUNT_FULL);
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Milestone 3 — Consume, Classify, and Route N Records
-    // ══════════════════════════════════════════════════════════════════
-    static void phaseRoute(long count) {
-        banner(String.format("Milestone 3: Route %,d Records (Produce + Consume + Classify + Route)", count));
+    // ──────────────────────────────────────────────────────────────────
+    // Bounded routing run — produces exactly N fresh records then
+    // immediately consumes and routes those same N records. Designed
+    // for integration testing where a deterministic, bounded dataset
+    // is needed to verify routing correctness before a full-scale run.
+    // ──────────────────────────────────────────────────────────────────
+    static void route(long count) {
+        banner(String.format("Route %,d Records (Produce → Consume → Classify → Route)", count));
 
-        // 1. Produce N fresh records to source topic first
-        System.out.println("Step 1: Producing " + count + " records to source...");
-        phaseProduce(count);
-        System.out.println("Flushed producer. Starting consumer and router...");
+        // Step 1: Produce fresh records to the source topic.
+        System.out.println("Producing " + count + " records to source topic...");
+        produce(count);
+        System.out.println("Producer flushed. Starting consumer and router...");
 
-        // 2. Consume exactly N records and route them
+        // Step 2: Consume exactly N records starting from the earliest
+        // available offset and route each one to its target topic.
+        // A unique consumer group ID prevents interference with other
+        // concurrent or past runs.
         Properties consumerProps = ConsumerConfig.defaultSettings("route-group-" + System.currentTimeMillis());
         Properties producerProps = ProducerConfig.tuned();
-        
+
         ProgressTimer timer = new ProgressTimer();
 
         try (KafkaConsumerService consumerSvc = new KafkaConsumerService(Constants.TOPIC_SOURCE, consumerProps);
              KafkaProducerService producerSvc = new KafkaProducerService(Constants.TOPIC_SOURCE, producerProps)) {
-            
+
             MessageRouter router = new MessageRouter(producerSvc);
-            
-            System.out.println("\nStep 2: Routing records from source to target topics...");
+
+            System.out.println("\nRouting records from source to target topics...");
             consumerSvc.consumeExact(count, router, timer);
-            
+
             producerSvc.flush();
-            System.out.println("\nRouting complete. Generating verification report:\n");
+            System.out.println("\nRouting complete. Verification report:\n");
             router.printReport(count);
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Milestone 3 — Route All Available Records in source
-    // ══════════════════════════════════════════════════════════════════
-    static void phaseRouteAll() {
-        banner("Milestone 3: Route All Available Source Records");
+    // ──────────────────────────────────────────────────────────────────
+    // Full routing run — consumes every record currently available in
+    // the source topic from the earliest offset to the current broker
+    // end offset, routing each record to its downstream topic in
+    // parallel. Three consumer threads (one per partition) are spawned
+    // so all CPU cores are active simultaneously during routing.
+    // ──────────────────────────────────────────────────────────────────
+    static void routeAll() {
+        banner("Route All Available Source Records");
 
         Properties consumerProps = ConsumerConfig.defaultSettings("route-all-group");
         Properties producerProps = ProducerConfig.tuned();
 
-        ProgressTimer timer = new ProgressTimer();
-        Timer routingTimer = new Timer();
+        ProgressTimer timer       = new ProgressTimer();
+        Timer         routeTimer  = new Timer();
 
         try (KafkaConsumerService consumerSvc = new KafkaConsumerService(Constants.TOPIC_SOURCE, consumerProps);
              KafkaProducerService producerSvc = new KafkaProducerService(Constants.TOPIC_SOURCE, producerProps)) {
-            
+
             MessageRouter router = new MessageRouter(producerSvc);
-            
-            routingTimer.start();
+
+            routeTimer.start();
             long processed = consumerSvc.consumeAll(router, timer);
             producerSvc.flush();
-            routingTimer.stop();
+            routeTimer.stop();
 
             System.out.println("\nAll source records routed. Verification report:\n");
             router.printReport(processed);
-            
+
             if (processed > 0) {
-                routingTimer.printSummary("Routing Throughput", processed);
+                routeTimer.printSummary("Routing Throughput", processed);
             }
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Milestone 3 — Count Offset totals across all topics
-    // ══════════════════════════════════════════════════════════════════
-    static void phaseCountOffsets() {
-        banner("Verify Topic Offsets & Totals");
-        
+    // ──────────────────────────────────────────────────────────────────
+    // Offset inspection — queries the broker's latest offset for every
+    // partition of each pipeline topic and prints the per-partition and
+    // aggregate counts. Use this after a routing run to verify that
+    // critical + nominal == source and archive == source.
+    // ──────────────────────────────────────────────────────────────────
+    static void countOffsets() {
+        banner("Topic Offset Report");
+
         Properties props = ConsumerConfig.defaultSettings("offset-verifier-" + System.currentTimeMillis());
-        
+
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
             String[] topics = {
                 Constants.TOPIC_SOURCE,
@@ -270,23 +306,23 @@ public class App {
                 Constants.TOPIC_NOMINAL,
                 Constants.TOPIC_ARCHIVE
             };
-            
+
             System.out.println("Querying latest offsets from Kafka broker...\n");
-            
+
             for (String topic : topics) {
                 List<PartitionInfo> partitionInfos = consumer.partitionsFor(topic);
                 if (partitionInfos == null || partitionInfos.isEmpty()) {
-                    System.out.printf("Topic: %-20s | (No partitions found or topic doesn't exist)%n", topic);
+                    System.out.printf("Topic: %-20s | (topic not found or has no partitions)%n", topic);
                     continue;
                 }
-                
+
                 List<TopicPartition> partitions = partitionInfos.stream()
                     .map(pi -> new TopicPartition(pi.topic(), pi.partition()))
                     .collect(Collectors.toList());
-                
+
                 Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
                 long total = endOffsets.values().stream().mapToLong(Long::longValue).sum();
-                
+
                 System.out.printf("Topic: %-20s | Total Records: %,d%n", topic, total);
                 for (TopicPartition tp : partitions) {
                     System.out.printf("  └─ Partition %d offset: %,d%n", tp.partition(), endOffsets.get(tp));
@@ -296,25 +332,29 @@ public class App {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Run all phases in order
-    // ══════════════════════════════════════════════════════════════════
+    // ──────────────────────────────────────────────────────────────────
+    // End-to-end pipeline — runs every command in the correct order:
+    // schema preview → validation → connectivity check → small
+    // ingestion → benchmark → medium ingestion → full 50M ingestion
+    // → bounded routing test → full routing run.
+    // ──────────────────────────────────────────────────────────────────
     static void runAll() throws IOException {
-        phasePrint();       System.out.println();
-        phaseValidate();    System.out.println();
-        phaseConnect();     System.out.println();
-        phaseProduce(Constants.COUNT_SMALL);    System.out.println();
-        phaseBenchmark();   System.out.println();
-        phaseProduce(Constants.COUNT_MEDIUM);   System.out.println();
-        phaseFullRun();     System.out.println();
-        phaseRoute(Constants.COUNT_SMALL);     System.out.println();
-        phaseRouteAll();
+        samplePrint();                              System.out.println();
+        sampleValidate();                           System.out.println();
+        brokerConnectTest();                        System.out.println();
+        produce(Constants.COUNT_SMALL);             System.out.println();
+        benchmark();                                System.out.println();
+        produce(Constants.COUNT_MEDIUM);            System.out.println();
+        fullRun();                                  System.out.println();
+        route(Constants.COUNT_SMALL);               System.out.println();
+        routeAll();
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Helpers
-    // ══════════════════════════════════════════════════════════════════
+    // ──────────────────────────────────────────────────────────────────
+    // Internal helpers
+    // ──────────────────────────────────────────────────────────────────
 
+    /** Prints a Unicode box banner to visually separate command output sections. */
     static void banner(String title) {
         String line = "═".repeat(title.length() + 4);
         System.out.println();
@@ -324,6 +364,10 @@ public class App {
         System.out.println();
     }
 
+    /**
+     * Prints a hint showing how to independently verify the source topic
+     * offset count via the Kafka CLI, useful after large ingestion runs.
+     */
     static void printVerifyHint(long count) {
         System.out.println();
         System.out.println("  Verify offset count in Kafka:");
@@ -334,25 +378,25 @@ public class App {
 
     static void printUsage() {
         System.out.println("""
-            IoT Telemetry Pipeline — Milestone 3
+            IoT Telemetry Pipeline
 
             Usage:  java -jar iot-telemetry-pipeline-1.0-SNAPSHOT-jar-with-dependencies.jar <command> [n]
 
             Commands:
               print              Generate & print 100 sample records to console
               validate           Generate 1,000 records → sample.csv → validate schema
-              connect            Send "Hello Kafka" to verify broker connectivity
-              produce <n>        Produce N records to the source topic  (default: 10,000)
+              connect            Send a probe message to verify broker connectivity
+              produce <n>        Ingest N records into the source topic  (default: 10,000)
               benchmark          Compare baseline vs tuned producer on 10,000 records
-              fullrun            Produce 50,000,000 records with 5%-interval progress
+              fullrun            Ingest 50,000,000 records with 5%-interval progress
               route <n>          Produce N records, then consume & route exactly those N records
-              routeall           Route all records currently available in source topic from earliest
-              countoffsets       Count offset totals for source, critical, nominal, archive topics
-              all                Run every phase in order
+              routeall           Route all records available in source topic from earliest offset
+              countoffsets       Print per-partition offset totals for all pipeline topics
+              all                Run every command end-to-end in the correct order
 
             Examples:
               java -jar app.jar print
-              java -jar app.jar route 1000
+              java -jar app.jar produce 1000000
               java -jar app.jar routeall
               java -jar app.jar countoffsets
             """);

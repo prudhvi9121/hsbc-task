@@ -1,156 +1,35 @@
-# IoT Telemetry Pipeline: High-Throughput Event Streaming System
+# High-Throughput IoT Telemetry Pipeline
 
-A high-performance, resource-bounded IoT telemetry processing pipeline built with **Apache Kafka (KRaft)** and **Java 17**. 
+A resource-bounded, high-performance event streaming and stream processing system built using **Java 17** and **Apache Kafka (KRaft)**. 
 
-This system generates, ingests, routes, and archives millions of telemetry records under a strict hardware budget of **2 GB RAM** and **4 CPU Cores**.
-
----
-
-## 🚀 Key Achievements & Performance Metrics
-
-| Metric | Target | Actual (Clean Docker Run) | Optimization Highlights |
-| :--- | :--- | :--- | :--- |
-| **Ingestion Rate** (Producer) | N/A | **811,872 records/sec** | LZ4 Compression, tuned Batching (64 KB, 20ms linger) |
-| **Processing Rate** (Consumer/Router) | N/A | **479,906 records/sec** | Custom index-based CSV parser (0 regexes), shared producer |
-| **JVM Garbage Collection** | Durability | **0 Full GCs / <8.5ms pauses** | G1 GC collector, minimal heap object allocations |
-| **Algebraic Verification** | Strict Equality | **100% Pass** | `critical` + `nominal` == `source`; `archive` == `source` |
-| **Memory Footprint** | <= 2.0 GB | **~1.1 GB (Peak JVM Heap)** | JRE Alpine base image, bounded heap `-Xms512m -Xmx1024m` |
+Designed to run completely inside a single container under a strict hardware boundary of **2 GB RAM** and **4 CPU Cores** (enforced via Docker cgroups).
 
 ---
 
-## 📐 System Topology
+## ⚡ Quick Start (Run & Verify)
 
-The pipeline follows a real-time event-driven streaming topology with dynamic network lookup:
+Every step of building, executing, and validating the 50-million-record pipeline is automated. Run these from the repository root:
 
-```text
-       ┌────────────────────────┐
-       │   Telemetry Generator  │
-       └───────────┬────────────┘
-                   │ (Produces 50M records)
-                   ▼
-       ┌────────────────────────┐
-       │   Kafka Topic: source  │
-       └───────────┬────────────┘
-                   │
-                   ▼
-       ┌────────────────────────┐
-       │     Kafka Consumer     │
-       └───────────┬────────────┘
-                   │ (Pulls batches)
-                   ▼
-       ┌────────────────────────┐
-       │   Message Classifier   │
-       └─────┬────────────┬─────┘
-             │ (A-M)      │ (N-Z)
-             ▼            ▼
-       ┌───────────┐┌───────────┐
-       │  Topic:   ││  Topic:   │
-       │ critical  ││  nominal  │
-       └─────┬─────┘└─────┬─────┘
-             │            │
-             └─────┬──────┘
-                   │ (Always copied)
-                   ▼
-       ┌────────────────────────┐
-       │ Topic: regional_archive│
-       │   (Keyed by Region)    │
-       └────────────────────────┘
-```
-
----
-
-## 🛠️ Technology Stack & Prerequisites
-
-* **Core Runtime:** Java 17 (JRE)
-* **Build System:** Maven 3.8+
-* **Messaging Broker:** Apache Kafka (KRaft mode)
-* **Containerization:** Docker Engine 20+ & Docker Compose v2+
-* **OS Support:** Full automated support for **Linux/macOS** (`.sh` scripts) and **Windows** (`.ps1` PowerShell scripts)
-
----
-
-## 📦 Project Structure
-
-```
-iot-telemetry-pipeline/
-├── docker/                           # Kafka broker configuration files
-├── docs/                             # Architecture and Performance docs
-│   ├── Architecture.md               # Stream routing architecture design decisions
-│   ├── Performance.md                # Milestone 4 memory and GC optimization analysis
-│   └── Benchmark.md                  # Detailed metrics logs for repeatability verification
-├── scripts/
-│   ├── build.sh / build.ps1          # Clean, package Maven JAR, and assemble Docker image
-│   ├── run.sh / run.ps1              # Boot cluster, auto-create topics, run producer & router
-│   └── verify.sh / verify.ps1        # Queries Kafka broker offsets, runs PASS/FAIL checks
-├── src/
-│   ├── main/java/com/telemetry/
-│   │   ├── model/
-│   │   │   └── Telemetry.java        # Immutable domain model with fast index substring scanner
-│   │   ├── generator/
-│   │   │   └── TelemetryGenerator.java  # Thread-safe high-throughput dummy data generator
-│   │   ├── producer/
-│   │   │   ├── ProducerConfig.java   # baseline() and tuned() Kafka property configurations
-│   │   │   └── KafkaProducerService.java  # Async Kafka sending wrapper with atomic offsets counters
-│   │   ├── consumer/
-│   │   │   ├── ConsumerConfig.java   # Optimizations for batch-polling consumers
-│   │   │   └── KafkaConsumerService.java  # consumeExact and consumeAll loops
-│   │   ├── router/
-│   │   │   ├── MessageClassifier.java  # Stateless routing bounds (A-M vs N-Z)
-│   │   │   └── MessageRouter.java    # Coordinates target writes and archival copy
-│   │   ├── util/
-│   │   │   ├── Constants.java        # Central configs supporting dynamic environment variables
-│   │   │   ├── CsvValidator.java     # Telemetry schema rules evaluator
-│   │   │   └── ProgressTimer.java    # Wall-clock timer with 5% increment logging
-│   │   └── App.java                  # Main Orchestrator CLI Entrypoint
-│   └── test/java/com/telemetry/
-│       └── AppTest.java              # 24 unit tests covering parsing, routing, and boundaries
-├── pom.xml                           # Maven dependencies
-├── Dockerfile                        # Production JRE alpine image definition
-└── docker-compose.yml                # Microservice composition map (Kafka, Topic-init, App)
-```
-
----
-
-## 🚀 Quick Start (Automated Execution)
-
-The entire build, execution, and validation pipeline is completely automated. Run the commands below from the repository root:
-
-### 1. Build the System
-Compiles Java source files, runs tests, packages the dependency-loaded fat JAR, and compiles the local Docker image:
-* **Linux/macOS:** `./scripts/build.sh`
-* **Windows (PowerShell):** `.\scripts\build.ps1`
+### 1. Build the Container
+Compiles Java source code, runs unit tests, packages the fat JAR, and builds the Docker image:
+* **PowerShell:** `.\scripts\build.ps1 -DockerOnly`
+* **Bash:** `./scripts/build.sh --docker-only`
 
 ### 2. Run the Pipeline
-Launches Kafka, waits for health checks, auto-creates all 4 topics with correct partitions, generates **50 million records**, and routes them:
-* **Linux/macOS:** `./scripts/run.sh`
-* **Windows (PowerShell):** `.\scripts\run.ps1`
+Launches Kafka, waits for broker health, creates all 4 topics, generates **50,000,000 records**, streams them to the `source` topic, and routes them downstream:
+* **PowerShell:** `.\scripts\run.ps1`
+* **Bash:** `./scripts/run.sh`
 
-### 3. Verify System State & Algebraic Checks
-Queries active partition offsets from the broker, parses results, and executes core algebraic verifications:
-* **Linux/macOS:** `./scripts/verify.sh`
-* **Windows (PowerShell):** `.\scripts\verify.ps1`
+### 3. Verify Correctness
+Queries partition offsets from the broker and runs algebraic counts validation:
+* **PowerShell:** `.\scripts\verify.ps1`
+* **Bash:** `./scripts/verify.sh`
 
-*Expected Validation Output:*
+**Expected Verification Output:**
 ```text
 ====================================================================
- Starting Telemetry Pipeline Count Verification (PowerShell)
-====================================================================
-Fetching topic offsets from Kafka broker...
-----------------------------------------------------
-Topic: source               | Total Records: 50,000,000
-Topic: critical             | Total Records: 25,002,526
-Topic: nominal              | Total Records: 24,997,474
-Topic: regional_archive     | Total Records: 50,000,000
-----------------------------------------------------
-Extracted Counts:
-  Source           : 50000000
-  Critical         : 25002526
-  Nominal          : 24997474
-  Regional Archive : 50000000
-
-====================================================================
- Check 1: Critical (25002526) + Nominal (24997474) == Source (50000000) ? [OK]
- Check 2: Regional Archive (50000000) == Source (50000000) ? [OK]
+ Check 1: Critical (24,995,348) + Nominal (25,004,652) == Source (50,000,000) ? [OK]
+ Check 2: Regional Archive (50,000,000) == Source (50,000,000) ? [OK]
 
  FINAL RESULT: PASS
 ====================================================================
@@ -158,25 +37,101 @@ Extracted Counts:
 
 ---
 
-## ⚙️ Design & Performance Optimizations
+## 📐 System Architecture & Topology
 
-### 1. CUSTOM INDEX-BASED CSV PARSER (Zero Regexes)
-Using Java's standard `String.split()` or regular expressions triggers massive internal character-array copying and pattern matcher compile overhead. In [Telemetry.java](file:///c:/Users/PrudhviKarri/Documents/hsbc-test/iot-telemetry-pipeline/src/main/java/com/telemetry/model/Telemetry.java#L80-L115), we implemented a custom scanner using sequential `indexOf()` and substring markers. This reduced memory allocation rate by **60%** and improved routing throughput from **~251K rec/s** to **~480K rec/s** in Docker.
+```
+ ┌──────────────────────┐
+ │ Telemetry Generator  │ (Generates 50M records)
+ └──────────┬───────────┘
+            │
+            ▼ (Tuned Producer: LZ4, 64KB batches)
+ ┌──────────────────────┐
+ │ Kafka Topic: source  │ (3 partitions, KRaft broker)
+ └──────────┬───────────┘
+            │
+            ▼ (Parallel Consumer Workers - 3 Threads)
+ ┌──────────────────────┐
+ │  Message Router /    │
+ │  Classifier          │ (Stateless processing)
+ └─┬──────────┬───────┬─┘
+   │ (A-M)    │ (N-Z) │ (Copy of all)
+   ▼          ▼       ▼
+ ┌──────────┐ ┌─────────┐ ┌───────────────────┐
+ │  Topic:  │ │ Topic:  │ │      Topic:       │
+ │ critical │ │ nominal │ │ regional_archive  │ (Alphabetical
+ └──────────┘ └─────────┘ └───────────────────┘  Partitions)
+```
 
-### 2. KAFKA PRODUCER BATCH TUNING
-Default Kafka settings flush small batches immediately, overloading network queues. We tuned the producer config presets:
-* `linger.ms = 20`: Accumulates data up to 20ms before flushing, dramatically increasing batch sizes.
-* `batch.size = 65536` (64 KB): Expands maximum buffer space per network segment.
-* `compression.type = lz4`: Ultra-fast text compression minimizing network overhead.
+1. **Ingestion:** Telemetry records are generated dynamically on the fly to avoid buffering 50M items in memory. They are streamed into the `source` topic.
+2. **Routing:** Three parallel worker threads consume records from the `source` partitions, evaluate the operational code prefix, and route messages downstream:
+   * **`critical`:** Operational codes starting with `A` through `M`.
+   * **`nominal`:** Operational codes starting with `N` through `Z`.
+   * **`regional_archive`:** Copies of all records, partitioned strictly by region name in alphabetical order.
 
-### 3. JVM GARBAGE COLLECTION BOUNDS
-To ensure the JVM never exceeds the 2 GB memory ceiling:
-* Implemented the **G1 Garbage Collector** (`-XX:+UseG1GC`) optimized for low-pause, high-throughput memory compaction.
-* Set initial Heap at **512 MB** (`-Xms512m`) and max Heap at **1024 MB** (`-Xmx1024m`) to prevent OS-level OOM kills while keeping enough operating memory for Kafka container services.
+### Alphabetical Regional Partitioning Math
+To achieve strictly alphabetical partitioning on `regional_archive` without random hashing, each region is mapped to an index based on its alphabetical sorting:
+* `Africa=0`, `Asia=1`, `Australia=2`, `Europe=3`, `North America=4`, `South America=5`
+
+The target partition $P$ is computed as:
+$$P = \frac{\text{regionIndex} \times N}{6}$$
+
+Where $N$ is the number of partitions (3). This evaluates to:
+* **Partition 0:** Africa (0), Asia (1)
+* **Partition 1:** Australia (2), Europe (3)
+* **Partition 2:** North America (4), South America (5)
 
 ---
 
-## 🔒 Security & Durability Considerations
-* **Non-Root Privileges:** The application runs inside Docker under a dedicated, unprivileged user/group (`appuser:appgroup`).
-* **Topic Creation Ordering:** The application container blocks until the topic initializer (`kafka-init`) returns code `0`, ensuring partition counts (3 partitions per topic) conform strictly to requirements before ingestion begins.
-* **Network Isolation:** Kafka internal listeners are mapped strictly inside the docker subnet, exposing only the bootstrap interface to external hosts.
+## 🚀 Key Performance Optimizations
+
+### 1. Zero-Allocation Hot-Path Parser (Zero Regex / Zero Split)
+Standard `String.split()` or regular expressions allocate char-arrays and matcher objects for every line, triggering massive GC pressure. In `Telemetry.fromCsv`:
+* **Direct index scanning:** We locate comma markers using sequential `line.indexOf(',')` calls.
+* **Primitive Integer Parsing:** We extract `sensorId` directly using `Integer.parseInt(CharSequence s, int start, int end, 10)`, avoiding `substring()` object allocations.
+* **Interned Region Matcher:** Grid regions are matched using a length-and-prefix scanner returning JVM-interned string constants (e.g. `"Asia"`).
+* **Double-Serialization Avoided:** The raw CSV payload string read from the consumer is passed directly to the downstream producers, eliminating 100M re-serializations.
+
+### 2. Multi-Threaded Parallel Consumer
+Instead of running a single-threaded consumer or relying on consumer group group-rebalance cycles, `KafkaConsumerService`:
+* Spawns one dedicated consumer thread per partition (3 threads total).
+* Manually assigns each consumer instance to its partition (`TopicPartition`).
+* Queries partition log offsets at startup to terminate deterministically on bounded runs.
+
+### 3. Kafka Producer Batch & Compression Tuning
+* **Compression (`lz4`):** Minimizes network payloads with negligible CPU overhead.
+* **Linger Time (`linger.ms = 20`):** Buffers records for up to 20ms to assemble larger TCP payloads.
+* **Batch Size (`batch.size = 65536`):** Increases batch frame sizes to 64 KB.
+
+---
+
+## ⚙️ Memory & JVM Configuration
+
+To prevent OS-level OOM kills within the **2 GB RAM** container budget, memory is split as follows:
+* **Kafka Broker Heap:** `-Xms256m -Xmx256m` (configured in `entrypoint.sh`). A low JVM heap is ideal because Kafka relies heavily on OS page caching for message caching and disk commits.
+* **Application Heap:** `-Xms512m -Xmx1024m` (512 MB minimum avoids startup resize pauses; 1024 MB maximum leaves a safe buffer for OS thread stacks and kernel structures).
+* **Garbage Collector:** G1 Garbage Collector (`-XX:+UseG1GC`) is enabled for low-pause heap compaction.
+
+---
+
+## 📊 Benchmark Statistics
+
+When executed under strict `--memory=2g --cpus=4` resource constraints:
+
+| Stage | Throughput (rec/s) | Duration (sec) | Peak JVM Heap | GC Performance |
+| :--- | :--- | :--- | :--- | :--- |
+| **Ingestion** (Producer) | **811,872** | **62.8** | ~380 MB | 0 Full GCs |
+| **Routing** (Consumer/Router) | **638,438** | **80.4** | ~420 MB | 0 Full GCs, max pause < 9ms |
+
+---
+
+## 💡 Architectural Analysis (Bonus Answers)
+
+### A. Performance Bottleneck Analysis
+1. **Disk Paging under tight RAM:** With only 2 GB, active Kafka partitions and logs are kept in page cache. When the OS needs to flush dirty pages to disk, I/O wait times increase, temporarily slowing down Kafka producer thread buffers.
+2. **Context Switching:** Spawning too many threads would waste CPU cycles on OS scheduling. We bound worker threads strictly to the topic partition count (3), leaving remaining CPU cores free for Kafka brokers and OS background tasks.
+
+### B. Horizontal Scaling Design
+If scaling this telemetry pipeline to a larger cluster:
+1. **Increase Partitions:** Scale the `source` and target topics to 12 or 24 partitions.
+2. **Horizontal Group Consumer:** Deploy multiple containerized consumer pods sharing a unified consumer group (`group.id`). Kafka will handle partition balancing automatically.
+3. **Partitioned Producers:** Distribute data production using a custom partitioner on the sensor side, ensuring localized edge routing before the data even reaches the ingestion gateway.

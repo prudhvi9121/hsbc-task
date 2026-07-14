@@ -1,10 +1,13 @@
 #!/bin/bash
 # ==============================================================================
-# Milestone 4 Performance Tuning & JVM Benchmarking Script
+# benchmark.sh — Producer & routing throughput benchmark with GC telemetry
 # ==============================================================================
-# This script runs the Java application with fixed heap settings and GC logging.
-# Configured Heap: 512 MB initial (Xms), 1024 MB max (Xmx)
-# Configured GC Logging: log to logs/gc.log with rotation
+# Runs the full routing pipeline with a bounded JVM heap and GC logging enabled.
+# Use this to measure end-to-end routing throughput and inspect garbage collection
+# behaviour under the 2 GB container memory constraint.
+#
+# Heap:    -Xms512m (initial) / -Xmx1024m (max)
+# GC log:  logs/gc.log (rotated, human-readable format)
 # ==============================================================================
 
 JAR_FILE="target/iot-telemetry-pipeline-1.0-SNAPSHOT-jar-with-dependencies.jar"
