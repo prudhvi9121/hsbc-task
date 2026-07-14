@@ -1,5 +1,5 @@
 # ==============================================================================
-# verify.ps1 — Validate routed topic offsets and print PASS or FAIL status (PowerShell).
+# verify.ps1 - Validate routed topic offsets and print PASS or FAIL status (PowerShell).
 # Usage: .\scripts\verify.ps1
 # ==============================================================================
 
@@ -17,7 +17,9 @@ Write-Host ""
 Write-Host "----------------------------------------------------" -ForegroundColor Gray
 foreach ($line in $output) {
     if ($line -match "Topic:" -or $line -match "offset") {
-        Write-Host $line -ForegroundColor Gray
+        # Clean up any non-ASCII characters that App.java printed to prevent console noise
+        $cleanLine = $line -replace "[^\x00-\x7F]", "-"
+        Write-Host $cleanLine -ForegroundColor Gray
     }
 }
 Write-Host "----------------------------------------------------" -ForegroundColor Gray

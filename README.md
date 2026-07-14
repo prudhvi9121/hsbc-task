@@ -12,8 +12,8 @@ Every step of building, executing, and validating the 50-million-record pipeline
 
 ### 1. Build the Container
 Compiles Java source code, runs unit tests, packages the fat JAR, and builds the Docker image:
-* **PowerShell:** `.\scripts\build.ps1 -DockerOnly`
-* **Bash:** `./scripts/build.sh --docker-only`
+* **PowerShell:** `.\scripts\build.ps1`
+* **Bash:** `./scripts/build.sh`
 
 ### 2. Run the Pipeline
 Launches Kafka, waits for broker health, creates all 4 topics, generates **50,000,000 records**, streams them to the `source` topic, and routes them downstream:

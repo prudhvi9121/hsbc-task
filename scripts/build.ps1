@@ -1,18 +1,12 @@
 # ==============================================================================
-# build.ps1 — Build the IoT Telemetry Pipeline (PowerShell)
+# build.ps1 - Build the IoT Telemetry Pipeline Docker Image (PowerShell)
 #
 # Usage:
-#   .\scripts\build.ps1              # Local Maven build + Docker image
-#   .\scripts\build.ps1 -DockerOnly  # Skip local Maven; Docker builds the JAR
+#   .\scripts\build.ps1
 #
-# The -DockerOnly flag is useful on machines that do not have Maven or Java
-# installed locally. The Dockerfile installs Maven and Kafka internally and
-# compiles the source code inside the build layer.
+# Requires only Docker. Maven and Java are not required locally as the code
+# is compiled inside the container's build environment.
 # ==============================================================================
-
-param(
-    [switch]$DockerOnly
-)
 
 $ErrorActionPreference = "Stop"
 
@@ -20,7 +14,7 @@ Write-Host "====================================================================
 Write-Host " Starting IoT Telemetry Pipeline Build Process (PowerShell)"        -ForegroundColor Green
 Write-Host "====================================================================" -ForegroundColor Green
 
-# ── Step 1: Verify Docker is available ───────────────────────────────────────
+# --- Step 1: Verify Docker is available ---------------------------------------
 Write-Host ""
 Write-Host "Checking Docker availability..." -ForegroundColor Cyan
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -31,37 +25,10 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 }
 Write-Host "  docker found: $(docker --version)" -ForegroundColor Green
 
-# ── Step 2: Optional local Maven build ───────────────────────────────────────
-if ($DockerOnly) {
-    Write-Host ""
-    Write-Host "Step 1: Skipping local Maven build (-DockerOnly flag set)." -ForegroundColor Yellow
-    Write-Host "        The Dockerfile will compile the source code internally." -ForegroundColor Yellow
-} else {
-    Write-Host ""
-    Write-Host "Step 1: Cleaning and packaging Java fat JAR with Maven..." -ForegroundColor Cyan
-
-    # Check if Maven is installed
-    if (-not (Get-Command mvn -ErrorAction SilentlyContinue)) {
-        Write-Host ""
-        Write-Host "WARNING: 'mvn' (Maven) was not found on PATH." -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "  Option A — Install Maven:" -ForegroundColor Cyan
-        Write-Host "    https://maven.apache.org/install.html" -ForegroundColor White
-        Write-Host "    Or via winget: winget install Apache.Maven" -ForegroundColor White
-        Write-Host ""
-        Write-Host "  Option B — Skip local Maven (Docker builds the JAR for you):" -ForegroundColor Cyan
-        Write-Host "    .\scripts\build.ps1 -DockerOnly" -ForegroundColor White
-        Write-Host ""
-        exit 1
-    }
-
-    mvn clean package -DskipTests
-    Write-Host "  Maven build complete." -ForegroundColor Green
-}
-
-# ── Step 3: Build Docker image ────────────────────────────────────────────────
+# --- Step 2: Build Docker image -----------------------------------------------
 Write-Host ""
-Write-Host "Step 2: Building Docker image 'telemetry-pipeline'..." -ForegroundColor Cyan
+Write-Host "Building Docker image 'telemetry-pipeline' from source..." -ForegroundColor Cyan
+Write-Host "This compiles the Java application and downloads Kafka internally inside the container." -ForegroundColor Gray
 docker build -t telemetry-pipeline .
 
 Write-Host ""
@@ -70,6 +37,6 @@ Write-Host " Build Success! Image 'telemetry-pipeline' is ready."               
 Write-Host ""
 Write-Host " Run the full pipeline with:"                                         -ForegroundColor Cyan
 Write-Host "   .\scripts\run.ps1"                                                 -ForegroundColor White
-Write-Host "   -- or (single container) --"                                       -ForegroundColor White
+Write-Host "   -- or (single container stand-alone mode) --"                      -ForegroundColor White
 Write-Host "   docker run --memory=2g --cpus=4 --rm telemetry-pipeline all"      -ForegroundColor White
 Write-Host "====================================================================" -ForegroundColor Green

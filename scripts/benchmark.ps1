@@ -1,5 +1,5 @@
 # ==============================================================================
-# benchmark.ps1 — Producer & routing throughput benchmark with GC telemetry
+# benchmark.ps1 - Producer & routing throughput benchmark with GC telemetry
 # ==============================================================================
 # Runs the full routing pipeline with a bounded JVM heap and GC logging enabled.
 # Use this to measure end-to-end routing throughput and inspect garbage collection

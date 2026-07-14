@@ -1,5 +1,5 @@
 # ==============================================================================
-# run.ps1 — Spin up Kafka, auto-create topics, produce 50M records, and route them.
+# run.ps1 - Spin up Kafka, auto-create topics, produce 50M records, and route them.
 # Usage: .\scripts\run.ps1
 # ==============================================================================
 

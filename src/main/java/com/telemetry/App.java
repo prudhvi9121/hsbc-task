@@ -325,7 +325,7 @@ public class App {
 
                 System.out.printf("Topic: %-20s | Total Records: %,d%n", topic, total);
                 for (TopicPartition tp : partitions) {
-                    System.out.printf("  └─ Partition %d offset: %,d%n", tp.partition(), endOffsets.get(tp));
+                    System.out.printf("  |- Partition %d offset: %,d%n", tp.partition(), endOffsets.get(tp));
                 }
                 System.out.println();
             }
@@ -354,13 +354,13 @@ public class App {
     // Internal helpers
     // ──────────────────────────────────────────────────────────────────
 
-    /** Prints a Unicode box banner to visually separate command output sections. */
+    /** Prints a plain ASCII box banner to visually separate command output sections. */
     static void banner(String title) {
-        String line = "═".repeat(title.length() + 4);
+        String line = "=".repeat(title.length() + 4);
         System.out.println();
-        System.out.println("╔" + line + "╗");
-        System.out.printf ("║  %s  ║%n", title);
-        System.out.println("╚" + line + "╝");
+        System.out.println("+" + line + "+");
+        System.out.printf ("|  %s  |%n", title);
+        System.out.println("+" + line + "+");
         System.out.println();
     }
 

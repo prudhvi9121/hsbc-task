@@ -23,7 +23,6 @@ WORKDIR /app
 COPY pom.xml /app/
 COPY src /app/src
 COPY scripts /app/scripts
-COPY docs /app/docs
 COPY README.md /app/README.md
 
 # Build the application fat JAR

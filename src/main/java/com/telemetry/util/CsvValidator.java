@@ -35,11 +35,11 @@ public final class CsvValidator {
      */
     public static boolean validate(String filePath) throws IOException {
         System.out.println();
-        System.out.println("╔══════════════════════════════════════╗");
-        System.out.println("║     CSV Schema Validation Report     ║");
-        System.out.println("╠══════════════════════════════════════╣");
-        System.out.printf ("║  File: %-30s║%n", filePath);
-        System.out.println("╚══════════════════════════════════════╝");
+        System.out.println("+--------------------------------------+");
+        System.out.println("|     CSV Schema Validation Report     |");
+        System.out.println("+--------------------------------------+");
+        System.out.printf ("|  File: %-30s|%n", filePath);
+        System.out.println("+--------------------------------------+");
 
         int total = 0, passed = 0, failed = 0;
 
@@ -53,7 +53,7 @@ public final class CsvValidator {
                     passed++;
                 } else {
                     failed++;
-                    System.err.printf("  ✗ Row %4d | %s%n  → %s%n", total, error, line);
+                    System.err.printf("  [FAIL] Row %4d | %s%n  -> %s%n", total, error, line);
                 }
             }
         }
@@ -66,9 +66,9 @@ public final class CsvValidator {
         boolean ok = (failed == 0);
         System.out.println();
         if (ok) {
-            System.out.println("  ✓ Result : ALL ROWS VALID — schema OK");
+            System.out.println("  [PASS] Result : ALL ROWS VALID - schema OK");
         } else {
-            System.out.println("  ✗ Result : VALIDATION FAILED — see errors above");
+            System.out.println("  [FAIL] Result : VALIDATION FAILED - see errors above");
         }
         System.out.println();
 

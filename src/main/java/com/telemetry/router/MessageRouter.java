@@ -87,22 +87,22 @@ public class MessageRouter {
         long a = archiveCount.get();
         long sum = c + n;
 
-        System.out.println("╔══════════════════════════════════════════════════════════════╗");
-        System.out.println("║                Message Routing Verification Report            ║");
-        System.out.println("╠══════════════════════════════════════════════════════════════╣");
-        System.out.printf ("║  Expected Input Processed  : %,30d  ║%n", expectedInput);
-        System.out.printf ("║  Routed Critical           : %,30d  ║%n", c);
-        System.out.printf ("║  Routed Nominal            : %,30d  ║%n", n);
-        System.out.printf ("║  Routed Regional Archive   : %,30d  ║%n", a);
-        System.out.printf ("║  Sum (Critical + Nominal)  : %,30d  ║%n", sum);
-        System.out.printf ("║  Parse Errors              : %,30d  ║%n", parsedErrorCount.get());
-        System.out.println("╠══════════════════════════════════════════════════════════════╣");
+        System.out.println("+--------------------------------------------------------------+");
+        System.out.println("|                Message Routing Verification Report           |");
+        System.out.println("+--------------------------------------------------------------+");
+        System.out.printf ("|  Expected Input Processed  : %,30d  |%n", expectedInput);
+        System.out.printf ("|  Routed Critical           : %,30d  |%n", c);
+        System.out.printf ("|  Routed Nominal            : %,30d  |%n", n);
+        System.out.printf ("|  Routed Regional Archive   : %,30d  |%n", a);
+        System.out.printf ("|  Sum (Critical + Nominal)  : %,30d  |%n", sum);
+        System.out.printf ("|  Parse Errors              : %,30d  |%n", parsedErrorCount.get());
+        System.out.println("+--------------------------------------------------------------+");
 
         boolean sumOk = (sum + parsedErrorCount.get()) == expectedInput;
         boolean archiveOk = (a + parsedErrorCount.get()) == expectedInput;
         
-        System.out.printf ("║  Check: Critical + Nominal == Source?  → %-19s  ║%n", sumOk ? "✓ PASS" : "✗ FAIL");
-        System.out.printf ("║  Check: Archive == Source?             → %-19s  ║%n", archiveOk ? "✓ PASS" : "✗ FAIL");
-        System.out.println("╚══════════════════════════════════════════════════════════════╝");
+        System.out.printf ("|  Check: Critical + Nominal == Source?  -> %-19s  |%n", sumOk ? "PASS" : "FAIL");
+        System.out.printf ("|  Check: Archive == Source?             -> %-19s  |%n", archiveOk ? "PASS" : "FAIL");
+        System.out.println("+--------------------------------------------------------------+");
     }
 }
