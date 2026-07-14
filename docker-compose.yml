@@ -1,0 +1,79 @@
+services:
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      # KRaft mode — no ZooKeeper required
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      # Two listeners: EXTERNAL for host access, INTERNAL for container-to-container, CONTROLLER for KRaft
+      KAFKA_LISTENERS: EXTERNAL://0.0.0.0:9092,INTERNAL://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: EXTERNAL://localhost:9092,INTERNAL://kafka:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "4"
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+  # Automatically creates all 4 required topics once Kafka passes its healthcheck.
+  # Uses the internal listener (kafka:19092) for container-to-container communication.
+  # Runs once and exits (restart: "no").
+  kafka-init:
+    image: apache/kafka:latest
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo 'Creating Kafka topics...' &&
+        /opt/kafka/bin/kafka-topics.sh --create --topic source          --bootstrap-server kafka:19092 --partitions 3 --replication-factor 1 --if-not-exists &&
+        /opt/kafka/bin/kafka-topics.sh --create --topic critical         --bootstrap-server kafka:19092 --partitions 3 --replication-factor 1 --if-not-exists &&
+        /opt/kafka/bin/kafka-topics.sh --create --topic nominal          --bootstrap-server kafka:19092 --partitions 3 --replication-factor 1 --if-not-exists &&
+        /opt/kafka/bin/kafka-topics.sh --create --topic regional_archive --bootstrap-server kafka:19092 --partitions 3 --replication-factor 1 --if-not-exists &&
+        echo 'Topics created:' &&
+        /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:19092
+    restart: "no"
+
+  # Containerized Java application service
+  # Runs under the same resource boundaries and depends on Kafka topics initialization.
+  telemetry-app:
+    image: telemetry-pipeline
+    container_name: telemetry-app
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:19092"
+    # By default, start by routing all available records in the background.
+    command: ["routeall"]
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "4"
+
+volumes:
+  kafka_data:
+    driver: local

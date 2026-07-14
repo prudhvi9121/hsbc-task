@@ -1,0 +1,29 @@
+<configuration>
+
+    <!-- ─────────────────────────────────────────────────────────────────
+         Console appender — plain text, no ANSI escape codes
+         ───────────────────────────────────────────────────────────────── -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ─────────────────────────────────────────────────────────────────
+         Suppress noisy Kafka-client internals.
+         During a 50 M-record run the Kafka client logs thousands of INFO
+         lines (batch metadata, fetch responses, etc.) that would dominate
+         the console and measurably slow throughput via I/O.
+         Setting kafka.* to WARN keeps the important signals visible.
+         ───────────────────────────────────────────────────────────────── -->
+    <logger name="org.apache.kafka"       level="WARN" />
+    <logger name="org.apache.kafka.clients" level="WARN" />
+
+    <!-- Application code logs at INFO -->
+    <logger name="com.telemetry" level="INFO" />
+
+    <root level="WARN">
+        <appender-ref ref="CONSOLE" />
+    </root>
+
+</configuration>
